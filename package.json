@@ -1,6 +1,6 @@
 {
     "name": "@hipo-finance/sdk",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "SDK for connecting to hTON liquid-staking protocol of hipo.finance",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
