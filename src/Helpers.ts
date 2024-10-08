@@ -13,13 +13,18 @@ interface TonConnectMessage {
     payload: string | undefined
 }
 
-export function createDepositMessage(treasury: Address, amountInNano: bigint, referrer?: Address): TonConnectMessage {
+export function createDepositMessage(
+    treasury: Address,
+    amountInNano: bigint,
+    queryId = 0n,
+    referrer?: Address,
+): TonConnectMessage {
     const address = treasury.toString()
     const amount = (amountInNano + feeStake).toString()
     const stateInit = undefined
     const payload = beginCell()
         .storeUint(opDepositCoins, 32)
-        .storeUint(0, 64)
+        .storeUint(queryId, 64)
         .storeAddress(null)
         .storeCoins(amountInNano)
         .storeCoins(1n)
@@ -35,13 +40,13 @@ export function createDepositMessage(treasury: Address, amountInNano: bigint, re
     }
 }
 
-export function createUnstakeMessage(wallet: Address, amountInNano: bigint): TonConnectMessage {
+export function createUnstakeMessage(wallet: Address, amountInNano: bigint, queryId = 0n): TonConnectMessage {
     const address = wallet.toString()
     const amount = feeUnstake.toString()
     const stateInit = undefined
     const payload = beginCell()
         .storeUint(opUnstakeTokens, 32)
-        .storeUint(0, 64)
+        .storeUint(queryId, 64)
         .storeCoins(amountInNano)
         .storeAddress(undefined)
         .storeMaybeRef(beginCell().storeUint(0, 4).storeCoins(1n))
