@@ -4,7 +4,10 @@
     "description": "SDK for connecting to hTON liquid-staking protocol of hipo.finance",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
-    "repository": "https://github.com/HipoFinance/sdk.git",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/HipoFinance/sdk.git"
+    },
     "author": "Behrang Norouzinia",
     "license": "MIT",
     "bugs": {
