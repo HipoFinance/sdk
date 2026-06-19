@@ -1,6 +1,8 @@
 import { Address, beginCell } from '@ton/ton'
 import { feeStake, feeUnstake, minimumTonBalanceReserve, opDepositCoins, opUnstakeTokens } from './Constants'
 
+type UnstakeMode = 'auto' | 'instant' | 'best'
+
 export function maxAmountToStake(tonBalance: bigint): bigint {
     tonBalance -= minimumTonBalanceReserve
     return tonBalance > 0n ? tonBalance : 0n
@@ -40,7 +42,12 @@ export function createDepositMessage(
     }
 }
 
-export function createUnstakeMessage(wallet: Address, amountInNano: bigint, queryId = 0n): TonConnectMessage {
+export function createUnstakeMessage(
+    wallet: Address,
+    amountInNano: bigint,
+    unstakeMode: UnstakeMode = 'auto',
+    queryId = 0n,
+): TonConnectMessage {
     const address = wallet.toString()
     const amount = feeUnstake.toString()
     const stateInit = undefined
@@ -49,7 +56,7 @@ export function createUnstakeMessage(wallet: Address, amountInNano: bigint, quer
         .storeUint(queryId, 64)
         .storeCoins(amountInNano)
         .storeAddress(undefined)
-        .storeMaybeRef(beginCell().storeUint(0, 4).storeCoins(1n))
+        .storeMaybeRef(beginCell().storeUint(fromUnstakeMode(unstakeMode), 4).storeCoins(1n))
         .endCell()
         .toBoc()
         .toString('base64')
@@ -58,5 +65,16 @@ export function createUnstakeMessage(wallet: Address, amountInNano: bigint, quer
         amount,
         stateInit,
         payload,
+    }
+}
+
+function fromUnstakeMode(unstakeMode: UnstakeMode): number {
+    switch (unstakeMode) {
+        case 'auto':
+            return 0
+        case 'instant':
+            return 1
+        case 'best':
+            return 2
     }
 }
