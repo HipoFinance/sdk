@@ -21,7 +21,7 @@
         "prepare": "rm -rf dist && tsc"
     },
     "peerDependencies": {
-        "@ton/ton": "^16.2.4"
+        "@ton/ton": "^16.3.0"
     },
     "devDependencies": {
         "typescript": "^6.0.3"
