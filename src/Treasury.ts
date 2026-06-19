@@ -208,4 +208,9 @@ export class Treasury implements Contract {
             oldParents: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), emptyDictionaryValue, stack.readCellOpt()),
         }
     }
+
+    async getMaxBurnableTokens(provider: ContractProvider): Promise<bigint> {
+        const { stack } = await provider.get('get_max_burnable_tokens', [])
+        return stack.readBigNumber()
+    }
 }
