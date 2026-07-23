@@ -8,6 +8,7 @@ import {
     Dictionary,
     DictionaryValue,
     Slice,
+    TupleBuilder,
 } from '@ton/ton'
 
 export interface Times {
@@ -53,6 +54,12 @@ export interface Participation {
     currentVsetHash?: bigint
     stakeHeldFor?: bigint
     stakeHeldUntil?: bigint
+}
+
+export interface TreasuryFees {
+    requestLoanFee: bigint
+    depositCoinsFee: bigint
+    unstakeAllTokensFee: bigint
 }
 
 export interface TreasuryConfig {
@@ -211,6 +218,78 @@ export class Treasury implements Contract {
 
     async getMaxBurnableTokens(provider: ContractProvider): Promise<bigint> {
         const { stack } = await provider.get('get_max_burnable_tokens', [])
+        return stack.readBigNumber()
+    }
+
+    async getParticipation(provider: ContractProvider, roundSince: bigint): Promise<Participation> {
+        const tb = new TupleBuilder()
+        tb.writeNumber(roundSince)
+        const { stack } = await provider.get('get_participation', tb.build())
+        return {
+            state: stack.readNumber(),
+            size: stack.readBigNumber(),
+            sorted: Dictionary.loadDirect(Dictionary.Keys.BigUint(112), sortedDictionaryValue, stack.readCellOpt()),
+            requests: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
+            rejected: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
+            accepted: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
+            accrued: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
+            staked: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
+            recovering: Dictionary.loadDirect(
+                Dictionary.Keys.BigUint(256),
+                requestDictionaryValue,
+                stack.readCellOpt(),
+            ),
+            totalStaked: stack.readBigNumber(),
+            totalRecovered: stack.readBigNumber(),
+            currentVsetHash: stack.readBigNumber(),
+            stakeHeldFor: stack.readBigNumber(),
+            stakeHeldUntil: stack.readBigNumber(),
+        }
+    }
+
+    async getCollectionAddress(provider: ContractProvider, roundSince: bigint): Promise<Address> {
+        const tb = new TupleBuilder()
+        tb.writeNumber(roundSince)
+        const { stack } = await provider.get('get_collection_address', tb.build())
+        return stack.readAddress()
+    }
+
+    async getBillAddress(provider: ContractProvider, roundSince: bigint, index: bigint): Promise<Address> {
+        const tb = new TupleBuilder()
+        tb.writeNumber(roundSince)
+        tb.writeNumber(index)
+        const { stack } = await provider.get('get_bill_address', tb.build())
+        return stack.readAddress()
+    }
+
+    async getLoanAddress(provider: ContractProvider, borrower: Address, roundSince: bigint): Promise<Address> {
+        const tb = new TupleBuilder()
+        tb.writeAddress(borrower)
+        tb.writeNumber(roundSince)
+        const { stack } = await provider.get('get_loan_address', tb.build())
+        return stack.readAddress()
+    }
+
+    async getTreasuryFees(provider: ContractProvider, ownershipAssignedAmount: bigint): Promise<TreasuryFees> {
+        const tb = new TupleBuilder()
+        tb.writeNumber(ownershipAssignedAmount)
+        const { stack } = await provider.get('get_treasury_fees', tb.build())
+        return {
+            requestLoanFee: stack.readBigNumber(),
+            depositCoinsFee: stack.readBigNumber(),
+            unstakeAllTokensFee: stack.readBigNumber(),
+        }
+    }
+
+    async getSurplus(provider: ContractProvider): Promise<bigint> {
+        const { stack } = await provider.get('get_surplus', [])
+        return stack.readBigNumber()
+    }
+
+    async getMaxPunishment(provider: ContractProvider, stake: bigint): Promise<bigint> {
+        const tb = new TupleBuilder()
+        tb.writeNumber(stake)
+        const { stack } = await provider.get('get_max_punishment', tb.build())
         return stack.readBigNumber()
     }
 }

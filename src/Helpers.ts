@@ -8,6 +8,15 @@ export function maxAmountToStake(tonBalance: bigint): bigint {
     return tonBalance > 0n ? tonBalance : 0n
 }
 
+// The smallest deposit that mints at least one hGRAM nano-unit at the current
+// exchange rate. Deposits below this are rejected by the treasury with
+// errDepositTooSmall (110). Pass totalCoins and totalTokens from
+// Treasury.getTreasuryState. In practice this is a few nanograms, but checking
+// it client-side avoids an on-chain bounce for dust amounts.
+export function minimumDepositAmount(totalCoins: bigint, totalTokens: bigint): bigint {
+    return (totalCoins + totalTokens - 1n) / totalTokens
+}
+
 interface TonConnectMessage {
     address: string
     amount: string
