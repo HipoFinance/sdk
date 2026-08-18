@@ -27,6 +27,9 @@ export enum ParticipationState {
     Validating,
     Held,
     Recovering,
+    // settled and booked its reward, but still holds its bills while an older round can still
+    // book a reward, so deferred deposits cannot mint at a rate that excludes that reward
+    ReadyToBurn,
     Burning,
 }
 
