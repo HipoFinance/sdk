@@ -18,7 +18,8 @@
         "access": "public"
     },
     "scripts": {
-        "prepare": "rm -rf dist && tsc"
+        "build": "rm -rf dist && tsc",
+        "prepare": "npm run build"
     },
     "peerDependencies": {
         "@ton/ton": "^16.3.0"

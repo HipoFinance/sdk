@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # `prepare` already builds on install, so a failure here would surface
+      # from `npm ci` itself. The explicit build below re-runs it so a compile
+      # error is attributed to its own step instead.
+      - run: npm ci
+
+      - run: npm run build
+
+      # The package ships `dist/`, which is gitignored and therefore only ever
+      # exists as build output. Fail loudly if the build produced nothing.
+      - name: Build output exists
+        run: test -f dist/index.js && test -f dist/index.d.ts
+
+# There is no test matrix here because the package has no tests yet. Running
+# `tsc` on three Node versions would not tell us anything `tsc` on one does not:
+# the compiler's behaviour does not vary by runtime. Add the matrix from
+# jalaali-js/ci.yml once there is a suite worth running across versions.

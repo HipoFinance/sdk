@@ -1,0 +1,4 @@
+# Deliberately overrides .gitignore, which excludes dist/. npm falls back to
+# .gitignore when no .npmignore exists, which would ship a package with no
+# build output. Everything not listed here is published.
+.github
