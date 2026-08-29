@@ -1,4 +1,4 @@
-import { Address, Contract, ContractProvider, TupleBuilder } from '@ton/ton'
+import { Address, Contract, ContractProvider, TupleBuilder } from '@ton/core'
 
 export class Parent implements Contract {
     constructor(readonly address: Address) {}

@@ -1,4 +1,4 @@
-import { Address } from '@ton/ton'
+import { Address } from '@ton/core'
 
 export const treasuryAddresses = new Map<string, Address>([
     ['mainnet', Address.parse('EQCLyZHP4Xe8fpchQz76O-_RmUhaVc_9BAoGyJrwJrcbz2eZ')],

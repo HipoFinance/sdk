@@ -1,4 +1,4 @@
-import { Address, beginCell, Cell, Contract, ContractProvider, Dictionary, Sender, SendMode } from '@ton/ton'
+import { Address, beginCell, Cell, Contract, ContractProvider, Dictionary, Sender, SendMode } from '@ton/core'
 import { opUnstakeTokens } from './Constants'
 
 export enum UnstakeMode {

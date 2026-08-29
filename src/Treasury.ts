@@ -9,7 +9,7 @@ import {
     DictionaryValue,
     Slice,
     TupleBuilder,
-} from '@ton/ton'
+} from '@ton/core'
 
 export interface Times {
     currentRoundSince: bigint

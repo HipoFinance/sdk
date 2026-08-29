@@ -1,4 +1,4 @@
-import { Address, beginCell } from '@ton/ton'
+import { Address, beginCell } from '@ton/core'
 import { feeStake, feeUnstake, minimumTonBalanceReserve, opDepositCoins, opUnstakeTokens } from './Constants'
 
 type UnstakeMode = 'auto' | 'instant' | 'best'
