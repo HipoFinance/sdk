@@ -45,6 +45,18 @@ export interface Request {
     newStakeMsg: Cell
 }
 
+export interface LoanRequest {
+    stage: ParticipationState
+    minPayment: bigint
+    /** Out of 65535. A bid made on the old 0-255 scale is exactly this value divided by 257. */
+    borrowerRewardShare: bigint
+    loanAmount: bigint
+    accrueAmount: bigint
+    stakeAmount: bigint
+    /** Out of 65535. borrowerFee snapshotted when the request was made, so a later change cannot reprice it. */
+    requestFee: bigint
+}
+
 export interface Participation {
     state?: ParticipationState
     size?: bigint
@@ -256,6 +268,41 @@ export class Treasury implements Contract {
             stakeHeldFor: stack.readBigNumber(),
             stakeHeldUntil: stack.readBigNumber(),
         }
+    }
+
+    /**
+     * A single borrower's request within a round, found across whichever of the round's
+     * dicts (requests/rejected/accepted/accrued/staked/recovering) currently holds it, so a
+     * caller doesn't need to know that packing or call get_participation and search it by hand.
+     *
+     * Returns `undefined` when the round has no participation, or the borrower has no request
+     * in any of its dicts. The contract signals this by returning an all-zero tuple, but
+     * `stage` can't be used to detect it: `participation::open` is also 0, so a genuinely
+     * found request still sitting in the open stage looks identical to the not-found sentinel
+     * on that field alone. `request_loan` enforces loanAmount > 0, so a stored request always
+     * has a non-zero loan amount while the sentinel never does; loanAmount is used as the
+     * not-found test instead.
+     */
+    async getLoanRequest(
+        provider: ContractProvider,
+        roundSince: bigint,
+        borrower: Address,
+    ): Promise<LoanRequest | undefined> {
+        const tb = new TupleBuilder()
+        tb.writeNumber(roundSince)
+        tb.writeAddress(borrower)
+        const { stack } = await provider.get('get_loan_request', tb.build())
+        const stage = stack.readNumber()
+        const minPayment = stack.readBigNumber()
+        const borrowerRewardShare = stack.readBigNumber()
+        const loanAmount = stack.readBigNumber()
+        const accrueAmount = stack.readBigNumber()
+        const stakeAmount = stack.readBigNumber()
+        const requestFee = stack.readBigNumber()
+        if (loanAmount === 0n) {
+            return undefined
+        }
+        return { stage, minPayment, borrowerRewardShare, loanAmount, accrueAmount, stakeAmount, requestFee }
     }
 
     async getCollectionAddress(provider: ContractProvider, roundSince: bigint): Promise<Address> {
