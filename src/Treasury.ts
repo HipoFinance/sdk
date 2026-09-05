@@ -35,10 +35,13 @@ export enum ParticipationState {
 
 export interface Request {
     minPayment: bigint
+    /** Out of 65535. A bid made on the old 0-255 scale is exactly this value divided by 257. */
     borrowerRewardShare: bigint
     loanAmount: bigint
     accrueAmount: bigint
     stakeAmount: bigint
+    /** borrowerFee snapshotted when the request was made, so a later change cannot reprice it. */
+    requestFee: bigint
     newStakeMsg: Cell
 }
 
@@ -83,6 +86,8 @@ export interface TreasuryConfig {
     governor: Address
     proposedGovernor: Cell | null
     governanceFee: bigint
+    /** Out of 65535 of each borrower's contractual share of a round's reward. 0 disables. */
+    borrowerFee: bigint
     collectionCodes: Dictionary<bigint, Cell>
     billCodes: Dictionary<bigint, Cell>
     oldParents: Dictionary<bigint, unknown>
@@ -110,19 +115,21 @@ export const requestDictionaryValue: DictionaryValue<Request> = {
     serialize: function (src: Request, builder: Builder) {
         builder
             .storeCoins(src.minPayment)
-            .storeUint(src.borrowerRewardShare, 8)
+            .storeUint(src.borrowerRewardShare, 16)
             .storeCoins(src.loanAmount)
             .storeCoins(src.accrueAmount)
             .storeCoins(src.stakeAmount)
+            .storeUint(src.requestFee, 16)
             .storeRef(src.newStakeMsg)
     },
     parse: function (src: Slice): Request {
         return {
             minPayment: src.loadCoins(),
-            borrowerRewardShare: src.loadUintBig(8),
+            borrowerRewardShare: src.loadUintBig(16),
             loanAmount: src.loadCoins(),
             accrueAmount: src.loadCoins(),
             stakeAmount: src.loadCoins(),
+            requestFee: src.loadUintBig(16),
             newStakeMsg: src.loadRef(),
         }
     },
@@ -150,7 +157,7 @@ export const participationDictionaryValue: DictionaryValue<Participation> = {
         return {
             state: src.loadUint(4),
             size: src.loadUintBig(16),
-            sorted: src.loadDict(Dictionary.Keys.BigUint(112), sortedDictionaryValue),
+            sorted: src.loadDict(Dictionary.Keys.BigUint(120), sortedDictionaryValue),
             requests: src.loadDict(Dictionary.Keys.BigUint(256), requestDictionaryValue),
             rejected: src.loadDict(Dictionary.Keys.BigUint(256), requestDictionaryValue),
             accepted: src.loadDict(Dictionary.Keys.BigUint(256), requestDictionaryValue),
@@ -209,6 +216,7 @@ export class Treasury implements Contract {
             governor: stack.readAddress(),
             proposedGovernor: stack.readCellOpt(),
             governanceFee: stack.readBigNumber(),
+            borrowerFee: stack.readBigNumber(),
             collectionCodes: Dictionary.loadDirect(
                 Dictionary.Keys.BigUint(32),
                 Dictionary.Values.Cell(),
@@ -231,7 +239,7 @@ export class Treasury implements Contract {
         return {
             state: stack.readNumber(),
             size: stack.readBigNumber(),
-            sorted: Dictionary.loadDirect(Dictionary.Keys.BigUint(112), sortedDictionaryValue, stack.readCellOpt()),
+            sorted: Dictionary.loadDirect(Dictionary.Keys.BigUint(120), sortedDictionaryValue, stack.readCellOpt()),
             requests: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
             rejected: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
             accepted: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
