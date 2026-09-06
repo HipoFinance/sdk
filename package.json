@@ -1,6 +1,6 @@
 {
     "name": "@hipo-finance/sdk",
-    "version": "4.5.0",
+    "version": "5.0.0",
     "description": "SDK for connecting to Hipo, the hGRAM liquid staking protocol on TON (hGRAM was formerly hTON)",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",

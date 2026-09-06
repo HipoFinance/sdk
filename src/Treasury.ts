@@ -11,6 +11,11 @@ import {
     TupleBuilder,
 } from '@ton/core'
 
+/**
+ * Round timing read live from the network config. For annualising the exchange rate, use
+ * `TreasuryConfig.roundDuration` instead of deriving a round length from these: the rates only move
+ * when a round the protocol lent into settles, so the interval they describe is not always a round.
+ */
 export interface Times {
     currentRoundSince: bigint
     participateSince: bigint
@@ -86,6 +91,12 @@ export interface TreasuryConfig {
     totalStaking: bigint
     totalUnstaking: bigint
     totalBorrowersStake: bigint
+    /**
+     * Pool money that defaulting borrowers walked away with, since the governor last cleared the
+     * counter. The exchange rate never moves down for a loss, so an uncovered shortfall is recorded
+     * here instead and `totalCoins` keeps its full claim.
+     */
+    deficit: bigint
     parent: Address | null
     participations: Dictionary<bigint, Participation>
     roundsImbalance: bigint
@@ -94,6 +105,18 @@ export interface TreasuryConfig {
     loanCodes: Dictionary<bigint, Cell>
     previousRate: bigint
     currentRate: bigint
+    /**
+     * Seconds that `previousRate` took to grow into `currentRate`: the gap between the start times of
+     * the two most recently settled validation rounds.
+     *
+     * This is NOT a round length, and that is the point of it. The rates only move when a round the
+     * protocol lent into settles, so a round in which nothing was lent widens this interval rather
+     * than passing unnoticed. Annualising the rate pair by a round length would report an unchanged
+     * APY for a pool validating every other round, whose true rate of growth had halved.
+     */
+    roundDuration: bigint
+    /** Start time of the most recent round whose reward is in `currentRate`. Only moves forward. */
+    lastSettledRound: bigint
     halter: Address
     governor: Address
     proposedGovernor: Cell | null
@@ -204,6 +227,13 @@ export class Treasury implements Contract {
         }
     }
 
+    /**
+     * The tuple mirrors the treasury's storage order and covers everything it stores.
+     *
+     * `deficit`, `roundDuration` and `lastSettledRound` are read at positions the previous treasury
+     * did not have, so this requires a treasury running the code that introduced them. Against an
+     * older one it throws rather than returning wrong numbers.
+     */
     async getTreasuryState(provider: ContractProvider): Promise<TreasuryConfig> {
         const { stack } = await provider.get('get_treasury_state', [])
         return {
@@ -212,6 +242,7 @@ export class Treasury implements Contract {
             totalStaking: stack.readBigNumber(),
             totalUnstaking: stack.readBigNumber(),
             totalBorrowersStake: stack.readBigNumber(),
+            deficit: stack.readBigNumber(),
             parent: stack.readAddressOpt(),
             participations: Dictionary.loadDirect(
                 Dictionary.Keys.BigUint(32),
@@ -224,6 +255,8 @@ export class Treasury implements Contract {
             loanCodes: Dictionary.loadDirect(Dictionary.Keys.BigUint(32), Dictionary.Values.Cell(), stack.readCell()),
             previousRate: stack.readBigNumber(),
             currentRate: stack.readBigNumber(),
+            roundDuration: stack.readBigNumber(),
+            lastSettledRound: stack.readBigNumber(),
             halter: stack.readAddress(),
             governor: stack.readAddress(),
             proposedGovernor: stack.readCellOpt(),
