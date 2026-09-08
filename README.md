@@ -12,7 +12,7 @@ The [sdk-example](https://github.com/HipoFinance/sdk-example) project uses this 
 
 `Wallet` provides access to jetton wallet state, in particular hGRAM balance (formerly hTON).
 
-`Treasury` has the functionality to parse the current state of Hipo Treasury, including the hGRAM/GRAM exchange rate fields (`currentRate`, `previousRate`, and `roundDuration` — the interval those two grew over, which is what an APY should be annualised by), the deficit counter, round times, fees, participations, and loan/collection/bill addresses.
+`Treasury` has the functionality to parse the current state of Hipo Treasury, including the hGRAM/GRAM exchange rate fields (`currentRate`, `previousRate`, and `windowDuration` — the interval those two grew over, which is what an APY should be annualised by, and which spans two settlement releases rather than one round), the intermediate observation `midRate`/`midRound`, the deficit counter, round times, fees, participations, and loan/collection/bill addresses.
 
 `Helpers` create deposit/unstake messages for TonConnect, and `minimumDepositAmount` computes the smallest deposit that the treasury will accept at the current exchange rate.
 

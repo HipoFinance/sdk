@@ -13,8 +13,9 @@ import {
 
 /**
  * Round timing read live from the network config. For annualising the exchange rate, use
- * `TreasuryConfig.roundDuration` instead of deriving a round length from these: the rates only move
- * when a round the protocol lent into settles, so the interval they describe is not always a round.
+ * `TreasuryConfig.windowDuration` instead of deriving a round length from these. The published rate
+ * window spans two settlement releases, so it is about two rounds and never one: dividing the year
+ * by a round length taken from here would roughly SQUARE the APY.
  */
 export interface Times {
     currentRoundSince: bigint
@@ -106,15 +107,18 @@ export interface TreasuryConfig {
     previousRate: bigint
     currentRate: bigint
     /**
-     * Seconds that `previousRate` took to grow into `currentRate`: the gap between the start times of
-     * the two most recently settled validation rounds.
+     * Seconds that `previousRate` took to grow into `currentRate`, measured on chain. Divide the
+     * year by this to annualise, and by nothing else.
      *
-     * This is NOT a round length, and that is the point of it. The rates only move when a round the
-     * protocol lent into settles, so a round in which nothing was lent widens this interval rather
-     * than passing unnoticed. Annualising the rate pair by a round length would report an unchanged
-     * APY for a pool validating every other round, whose true rate of growth had halved.
+     * It is NOT a round length and NOT one round. The window spans two settlement releases, so in
+     * steady state it is about two rounds -- 131072s where a round is 65536s -- and it widens
+     * further across rounds the pool did not lend into. Two different errors follow from reaching
+     * for a round length instead: the figure comes out roughly squared, and it would also hold
+     * steady for a pool validating every other round whose true rate of growth had halved.
+     *
+     * Was named `roundDuration` through 5.x, when the window did span a single round.
      */
-    roundDuration: bigint
+    windowDuration: bigint
     /** Start time of the most recent round whose reward is in `currentRate`. Only moves forward. */
     lastSettledRound: bigint
     halter: Address
@@ -126,6 +130,17 @@ export interface TreasuryConfig {
     collectionCodes: Dictionary<bigint, Cell>
     billCodes: Dictionary<bigint, Cell>
     oldParents: Dictionary<bigint, unknown>
+    /**
+     * The rate observed one settlement release back, with the round it belongs to. Together with
+     * `previousRate`/`currentRate` these give the three observations that make `windowDuration` a
+     * sliding two-release window: `previousRate` -> `midRate` -> `currentRate`.
+     *
+     * Read them to annualise over a single release instead of two -- a noisier figure, but the one
+     * to use if you want the most recent reward on its own rather than a smoothed rate.
+     */
+    midRate: bigint
+    /** Start time of the round whose reward is in `midRate`. Only moves forward. */
+    midRound: bigint
 }
 
 export const emptyDictionaryValue: DictionaryValue<unknown> = {
@@ -228,11 +243,12 @@ export class Treasury implements Contract {
     }
 
     /**
-     * The tuple mirrors the treasury's storage order and covers everything it stores.
+     * Everything the treasury stores.
      *
-     * `deficit`, `roundDuration` and `lastSettledRound` are read at positions the previous treasury
-     * did not have, so this requires a treasury running the code that introduced them. Against an
-     * older one it throws rather than returning wrong numbers.
+     * The tuple is read positionally and the treasury grows it only by APPENDING, so `midRate` and
+     * `midRound` are read last even though the treasury stores them beside the rate pair. Reading
+     * past the end is what fails here: this needs a treasury carrying the two-round rate window, and
+     * against an older one it throws rather than returning wrong numbers.
      */
     async getTreasuryState(provider: ContractProvider): Promise<TreasuryConfig> {
         const { stack } = await provider.get('get_treasury_state', [])
@@ -255,7 +271,7 @@ export class Treasury implements Contract {
             loanCodes: Dictionary.loadDirect(Dictionary.Keys.BigUint(32), Dictionary.Values.Cell(), stack.readCell()),
             previousRate: stack.readBigNumber(),
             currentRate: stack.readBigNumber(),
-            roundDuration: stack.readBigNumber(),
+            windowDuration: stack.readBigNumber(),
             lastSettledRound: stack.readBigNumber(),
             halter: stack.readAddress(),
             governor: stack.readAddress(),
@@ -269,6 +285,10 @@ export class Treasury implements Contract {
             ),
             billCodes: Dictionary.loadDirect(Dictionary.Keys.BigUint(32), Dictionary.Values.Cell(), stack.readCell()),
             oldParents: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), emptyDictionaryValue, stack.readCellOpt()),
+            // Appended by the treasury, so read last whatever their place in its storage. Property
+            // order here is read order, which is why these two sit at the bottom.
+            midRate: stack.readBigNumber(),
+            midRound: stack.readBigNumber(),
         }
     }
 
