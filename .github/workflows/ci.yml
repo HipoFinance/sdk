@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Daily, so a treasury upgrade that breaks this package surfaces on its own rather than waiting
+  # for someone to push.
+  schedule:
+    - cron: '41 6 * * *'
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -31,7 +36,77 @@ jobs:
       - name: Build output exists
         run: test -f dist/index.js && test -f dist/index.d.ts
 
-# There is no test matrix here because the package has no tests yet. Running
-# `tsc` on three Node versions would not tell us anything `tsc` on one does not:
-# the compiler's behaviour does not vary by runtime. Add the matrix from
-# jalaali-js/ci.yml once there is a suite worth running across versions.
+      - run: npm run lint
+
+      # `npm test` rebuilds and runs node --test over dist. The suite that matters most pins every
+      # get_treasury_state field to its tuple position: the treasury inserted `deficit` at index 5
+      # once, shifted everything after it, and broke four repositories at the same moment -- two of
+      # them live user-facing sites -- because nothing anywhere asserted what each slot meant.
+      - run: npm test
+
+  # A smoke check against the real treasury, because everything above passes just as happily when
+  # the on-chain shape has moved out from under it. That is not hypothetical: this package's job is
+  # reading a tuple that has been reshaped three times in a month.
+  #
+  # Scheduled rather than only on push, so a treasury upgrade that breaks this package is noticed
+  # when it happens rather than when someone next opens a pull request. It is a separate job so a
+  # toncenter outage cannot fail the build for a change that is perfectly fine.
+  mainnet:
+    name: Smoke test against mainnet
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      # Installed from a packed tarball rather than imported from src, so this exercises what a
+      # consumer actually gets -- including the published entry points and type declarations.
+      - name: Read the live treasury through the packed package
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination /tmp >/dev/null
+          mkdir -p /tmp/smoke && cd /tmp/smoke
+          npm init -y >/dev/null
+          npm install --silent /tmp/hipo-finance-sdk-*.tgz @ton/ton
+          node --input-type=module <<'JS'
+          import { TonClient } from '@ton/ton'
+          import { Treasury, treasuryAddresses, computeApy, computeLatestApy } from '@hipo-finance/sdk'
+
+          const client = new TonClient({ endpoint: 'https://toncenter.com/api/v2/jsonRPC' })
+          const treasury = client.open(Treasury.createFromAddress(treasuryAddresses.get('mainnet')))
+          const s = await treasury.getTreasuryState()
+
+          const fail = (m) => { console.error('FAIL:', m); process.exitCode = 1 }
+
+          // Not "did it parse" -- a shifted tuple parses fine and returns nonsense. These assert the
+          // values are the right KIND of thing, which is what a shift actually breaks.
+          if (s.totalCoins <= 0n) fail(`totalCoins ${s.totalCoins}`)
+          if (s.totalTokens <= 0n) fail(`totalTokens ${s.totalTokens}`)
+          if (s.parent == null) fail('parent is null')
+          if (s.windowDuration <= 0n) fail(`windowDuration ${s.windowDuration}`)
+          if (s.lastSettledRound < 1_700_000_000n) fail(`lastSettledRound ${s.lastSettledRound}`)
+          if (s.midRound < 1_700_000_000n) fail(`midRound ${s.midRound}`)
+          if (s.midRound > s.lastSettledRound) fail('midRound is after lastSettledRound')
+
+          // The exchange rate only ever rises, and a pool that has run for years is above 1.
+          const rate = Number(s.totalCoins) / Number(s.totalTokens)
+          if (!(rate >= 1 && rate < 10)) fail(`exchange rate ${rate}`)
+
+          const apy = computeApy(s)
+          const latest = computeLatestApy(s)
+          if (apy == null || !(apy > -0.5 && apy < 1)) fail(`apy ${apy}`)
+
+          console.info(`rate=${rate.toFixed(6)} window=${s.windowDuration}s ` +
+            `apy=${(apy * 100).toFixed(2)}% latest=${latest == null ? 'n/a' : (latest * 100).toFixed(2) + '%'}`)
+          JS
+
+# There is no Node version matrix here. `tsc` behaves the same on every runtime, and the suite is
+# pure arithmetic and tuple parsing with no runtime-specific surface. Add the matrix from
+# jalaali-js/ci.yml if that stops being true.

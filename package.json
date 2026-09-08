@@ -1,6 +1,6 @@
 {
     "name": "@hipo-finance/sdk",
-    "version": "6.0.0",
+    "version": "6.1.0",
     "description": "SDK for connecting to Hipo, the hGRAM liquid staking protocol on TON (hGRAM was formerly hTON)",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -19,12 +19,20 @@
     },
     "scripts": {
         "build": "rm -rf dist && tsc",
-        "prepare": "npm run build"
+        "prepare": "npm run build",
+        "test": "npm run build && node --test \"dist/**/*.test.js\"",
+        "lint": "eslint ."
     },
     "peerDependencies": {
         "@ton/core": "^0.63.0"
     },
     "devDependencies": {
-        "typescript": "^6.0.3"
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^26.5.0",
+        "eslint": "^10.10.0",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^17.12.0",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.70.0"
     }
 }

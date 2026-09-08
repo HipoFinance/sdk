@@ -14,6 +14,13 @@ The [sdk-example](https://github.com/HipoFinance/sdk-example) project uses this 
 
 `Treasury` has the functionality to parse the current state of Hipo Treasury, including the hGRAM/GRAM exchange rate fields (`currentRate`, `previousRate`, and `windowDuration` — the interval those two grew over, which is what an APY should be annualised by, and which spans two settlement releases rather than one round), the intermediate observation `midRate`/`midRound`, the deficit counter, round times, fees, participations, and loan/collection/bill addresses.
 
+Do not annualise the rate pair by hand. `computeApy(state)` returns the figure to display — growth
+over the treasury's published window, which spans two settlement releases and is therefore about
+two rounds, never one. Dividing the year by a round length instead roughly squares the result, and
+that has shipped before. `computeLatestApy(state)` gives the noisier single-release reading, for
+when you want the most recent round's reward on its own rather than a rate to quote; expect the two
+to disagree, because that gap is the smoothing working.
+
 `Helpers` create deposit/unstake messages for TonConnect, and `minimumDepositAmount` computes the smallest deposit that the treasury will accept at the current exchange rate.
 
 > Terminology: GRAM is the network coin (formerly Toncoin/TON) and hGRAM is Hipo's liquid staking token (formerly hTON). The network is still the TON blockchain.

@@ -2,3 +2,9 @@
 # .gitignore when no .npmignore exists, which would ship a package with no
 # build output. Everything not listed here is published.
 .github
+
+# Tests are built alongside the library; they are not part of the published package.
+*.test.ts
+*.test.js
+*.test.d.ts
+eslint.config.mjs
