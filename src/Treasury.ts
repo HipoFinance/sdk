@@ -66,7 +66,7 @@ export interface LoanRequest {
     stakeAmount: bigint
     /** Out of 65535. borrowerFee snapshotted when the request was made, so a later change cannot reprice it. */
     requestFee: bigint
-    /** The borrower's cap on loan + accrue + collateral, 0n for none -- and on a treasury older than the cap. */
+    /** The borrower's cap on loan + accrue + collateral, 0n for none. */
     maxStake: bigint
 }
 
@@ -349,8 +349,7 @@ export class Treasury implements Contract {
      * `stage` cannot tell: `participation::open` is also 0. Until 6.2.0 this read the tuple as
      * if that flag were not there, so every field came back one position off.
      *
-     * The treasury's stake-cap release appends `max_stake` as a ninth value; it reads as 0n from
-     * a treasury that returns eight.
+     * The ninth value, `max_stake`, is the borrower's cap on the loan's total stake, 0n for none.
      */
     async getLoanRequest(
         provider: ContractProvider,
@@ -369,7 +368,7 @@ export class Treasury implements Contract {
         const accrueAmount = stack.readBigNumber()
         const stakeAmount = stack.readBigNumber()
         const requestFee = stack.readBigNumber()
-        const maxStake = stack.remaining > 0 ? stack.readBigNumber() : 0n
+        const maxStake = stack.readBigNumber()
         if (!found) {
             return undefined
         }

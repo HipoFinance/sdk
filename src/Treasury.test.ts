@@ -108,9 +108,9 @@ void test('a treasury older than this SDK throws rather than returning shifted n
     await assert.rejects(() => treasury.getTreasuryState(providerReturning(items.slice(0, 24))))
 })
 
-// get_loan_request leads with a found flag, then the stage; the stake-cap release appends max_stake as
-// a ninth value. These are the tuples the treasury returns, value for value.
-const loanRequestTuple = (found: boolean, stage: bigint, maxStake?: bigint): TupleItem[] => [
+// get_loan_request leads with a found flag, then the stage, and ends with max_stake. These are the
+// tuples the treasury returns, value for value.
+const loanRequestTuple = (found: boolean, stage: bigint, maxStake: bigint): TupleItem[] => [
     int(found ? -1n : 0n), // found?
     int(stage), // stage
     int(933_333_331_153n), // min_payment
@@ -119,13 +119,12 @@ const loanRequestTuple = (found: boolean, stage: bigint, maxStake?: bigint): Tup
     int(399_999_998_365_398n), // accrue_amount
     int(501_000_000_000n), // stake_amount
     int(0n), // request_fee
-    ...(maxStake === undefined ? [] : [int(maxStake)]),
+    int(maxStake), // max_stake
 ]
 
 void test('get_loan_request is read from its found flag, not one position off', async () => {
     const treasury = Treasury.createFromAddress(someAddress)
-    // eight values: the treasury deployed before the stake cap
-    const r = await treasury.getLoanRequest(providerReturning(loanRequestTuple(true, 2n)), 1n, otherAddress)
+    const r = await treasury.getLoanRequest(providerReturning(loanRequestTuple(true, 2n, 0n)), 1n, otherAddress)
     assert.deepEqual(r, {
         stage: 2,
         minPayment: 933_333_331_153n,
@@ -138,7 +137,7 @@ void test('get_loan_request is read from its found flag, not one position off', 
     })
 })
 
-void test('get_loan_request reads the appended max_stake when the treasury returns it', async () => {
+void test('get_loan_request reads max_stake', async () => {
     const treasury = Treasury.createFromAddress(someAddress)
     const r = await treasury.getLoanRequest(
         providerReturning(loanRequestTuple(true, 0n, 400_000_000_000_000n)),
@@ -155,7 +154,6 @@ void test('get_loan_request is undefined when the treasury says not found', asyn
     const treasury = Treasury.createFromAddress(someAddress)
     const notFound = [int(0n), int(0n), int(0n), int(0n), int(0n), int(0n), int(0n), int(0n), int(0n)]
     assert.equal(await treasury.getLoanRequest(providerReturning(notFound), 1n, otherAddress), undefined)
-    assert.equal(await treasury.getLoanRequest(providerReturning(notFound.slice(0, 8)), 1n, otherAddress), undefined)
 })
 
 void test('a stored request round-trips with and without max_stake', () => {
