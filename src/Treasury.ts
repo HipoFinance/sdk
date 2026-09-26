@@ -48,6 +48,11 @@ export interface Request {
     stakeAmount: bigint
     /** borrowerFee snapshotted when the request was made, so a later change cannot reprice it. */
     requestFee: bigint
+    /**
+     * The borrower's cap on loan + accrue + collateral, 0n for none. Absent on a request stored before the
+     * treasury's stake-cap release, which the treasury reads as uncapped.
+     */
+    maxStake?: bigint
     newStakeMsg: Cell
 }
 
@@ -61,6 +66,8 @@ export interface LoanRequest {
     stakeAmount: bigint
     /** Out of 65535. borrowerFee snapshotted when the request was made, so a later change cannot reprice it. */
     requestFee: bigint
+    /** The borrower's cap on loan + accrue + collateral, 0n for none -- and on a treasury older than the cap. */
+    maxStake: bigint
 }
 
 export interface Participation {
@@ -170,18 +177,27 @@ export const requestDictionaryValue: DictionaryValue<Request> = {
             .storeCoins(src.accrueAmount)
             .storeCoins(src.stakeAmount)
             .storeUint(src.requestFee, 16)
-            .storeRef(src.newStakeMsg)
+        if (src.maxStake !== undefined) {
+            builder.storeCoins(src.maxStake)
+        }
+        builder.storeRef(src.newStakeMsg)
     },
     parse: function (src: Slice): Request {
-        return {
+        const request: Request = {
             minPayment: src.loadCoins(),
             borrowerRewardShare: src.loadUintBig(16),
             loanAmount: src.loadCoins(),
             accrueAmount: src.loadCoins(),
             stakeAmount: src.loadCoins(),
             requestFee: src.loadUintBig(16),
-            newStakeMsg: src.loadRef(),
+            newStakeMsg: Cell.EMPTY,
         }
+        // max_stake is the last field and only requests stored since the stake-cap release carry it
+        if (src.remainingBits > 0) {
+            request.maxStake = src.loadCoins()
+        }
+        request.newStakeMsg = src.loadRef()
+        return request
     },
 }
 
@@ -329,12 +345,12 @@ export class Treasury implements Contract {
      * caller doesn't need to know that packing or call get_participation and search it by hand.
      *
      * Returns `undefined` when the round has no participation, or the borrower has no request
-     * in any of its dicts. The contract signals this by returning an all-zero tuple, but
-     * `stage` can't be used to detect it: `participation::open` is also 0, so a genuinely
-     * found request still sitting in the open stage looks identical to the not-found sentinel
-     * on that field alone. `request_loan` enforces loanAmount > 0, so a stored request always
-     * has a non-zero loan amount while the sentinel never does; loanAmount is used as the
-     * not-found test instead.
+     * in any of its dicts. The getter leads with a `found` flag for exactly this, because
+     * `stage` cannot tell: `participation::open` is also 0. Until 6.2.0 this read the tuple as
+     * if that flag were not there, so every field came back one position off.
+     *
+     * The treasury's stake-cap release appends `max_stake` as a ninth value; it reads as 0n from
+     * a treasury that returns eight.
      */
     async getLoanRequest(
         provider: ContractProvider,
@@ -345,6 +361,7 @@ export class Treasury implements Contract {
         tb.writeNumber(roundSince)
         tb.writeAddress(borrower)
         const { stack } = await provider.get('get_loan_request', tb.build())
+        const found = stack.readBoolean()
         const stage = stack.readNumber()
         const minPayment = stack.readBigNumber()
         const borrowerRewardShare = stack.readBigNumber()
@@ -352,10 +369,20 @@ export class Treasury implements Contract {
         const accrueAmount = stack.readBigNumber()
         const stakeAmount = stack.readBigNumber()
         const requestFee = stack.readBigNumber()
-        if (loanAmount === 0n) {
+        const maxStake = stack.remaining > 0 ? stack.readBigNumber() : 0n
+        if (!found) {
             return undefined
         }
-        return { stage, minPayment, borrowerRewardShare, loanAmount, accrueAmount, stakeAmount, requestFee }
+        return {
+            stage,
+            minPayment,
+            borrowerRewardShare,
+            loanAmount,
+            accrueAmount,
+            stakeAmount,
+            requestFee,
+            maxStake,
+        }
     }
 
     async getCollectionAddress(provider: ContractProvider, roundSince: bigint): Promise<Address> {

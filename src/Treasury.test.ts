@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { Address, beginCell, Cell, Dictionary, TupleReader, type ContractProvider, type TupleItem } from '@ton/core'
 import { computeApy } from './Apy'
-import { Treasury } from './Treasury'
+import { Treasury, requestDictionaryValue } from './Treasury'
 
 // get_treasury_state returns a FLAT TUPLE that this SDK reads by position, and every consumer
 // downstream inherits those positions. When the treasury inserted `deficit` at index 5 it shifted
@@ -106,4 +106,75 @@ void test('a treasury older than this SDK throws rather than returning shifted n
     const treasury = Treasury.createFromAddress(someAddress)
     // 24 values: the shape before mid_rate and mid_round were appended.
     await assert.rejects(() => treasury.getTreasuryState(providerReturning(items.slice(0, 24))))
+})
+
+// get_loan_request leads with a found flag, then the stage; the stake-cap release appends max_stake as
+// a ninth value. These are the tuples the treasury returns, value for value.
+const loanRequestTuple = (found: boolean, stage: bigint, maxStake?: bigint): TupleItem[] => [
+    int(found ? -1n : 0n), // found?
+    int(stage), // stage
+    int(933_333_331_153n), // min_payment
+    int(1799n), // borrower_reward_share
+    int(300_000_000_000_000n), // loan_amount
+    int(399_999_998_365_398n), // accrue_amount
+    int(501_000_000_000n), // stake_amount
+    int(0n), // request_fee
+    ...(maxStake === undefined ? [] : [int(maxStake)]),
+]
+
+void test('get_loan_request is read from its found flag, not one position off', async () => {
+    const treasury = Treasury.createFromAddress(someAddress)
+    // eight values: the treasury deployed before the stake cap
+    const r = await treasury.getLoanRequest(providerReturning(loanRequestTuple(true, 2n)), 1n, otherAddress)
+    assert.deepEqual(r, {
+        stage: 2,
+        minPayment: 933_333_331_153n,
+        borrowerRewardShare: 1799n,
+        loanAmount: 300_000_000_000_000n,
+        accrueAmount: 399_999_998_365_398n,
+        stakeAmount: 501_000_000_000n,
+        requestFee: 0n,
+        maxStake: 0n,
+    })
+})
+
+void test('get_loan_request reads the appended max_stake when the treasury returns it', async () => {
+    const treasury = Treasury.createFromAddress(someAddress)
+    const r = await treasury.getLoanRequest(
+        providerReturning(loanRequestTuple(true, 0n, 400_000_000_000_000n)),
+        1n,
+        otherAddress,
+    )
+    // stage 0 is participation::open: a request that is found, which the old not-found test got wrong
+    assert.ok(r)
+    assert.equal(r.stage, 0)
+    assert.equal(r.maxStake, 400_000_000_000_000n)
+})
+
+void test('get_loan_request is undefined when the treasury says not found', async () => {
+    const treasury = Treasury.createFromAddress(someAddress)
+    const notFound = [int(0n), int(0n), int(0n), int(0n), int(0n), int(0n), int(0n), int(0n), int(0n)]
+    assert.equal(await treasury.getLoanRequest(providerReturning(notFound), 1n, otherAddress), undefined)
+    assert.equal(await treasury.getLoanRequest(providerReturning(notFound.slice(0, 8)), 1n, otherAddress), undefined)
+})
+
+void test('a stored request round-trips with and without max_stake', () => {
+    const base = {
+        minPayment: 400_000_000_000n,
+        borrowerRewardShare: 1799n,
+        loanAmount: 300_000_000_000_000n,
+        accrueAmount: 0n,
+        stakeAmount: 501_000_000_000n,
+        requestFee: 0n,
+        newStakeMsg: beginCell().storeUint(7, 8).endCell(),
+    }
+    for (const request of [base, { ...base, maxStake: 0n }, { ...base, maxStake: 400_000_000_000_000n }]) {
+        const b = beginCell()
+        requestDictionaryValue.serialize(request, b)
+        const parsed = requestDictionaryValue.parse(b.endCell().beginParse())
+        assert.deepEqual(
+            { ...parsed, newStakeMsg: parsed.newStakeMsg.hash() },
+            { ...request, newStakeMsg: request.newStakeMsg.hash() },
+        )
+    }
 })
