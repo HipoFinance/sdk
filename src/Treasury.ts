@@ -76,7 +76,14 @@ export interface Participation {
     sorted?: Dictionary<bigint, Dictionary<bigint, unknown>>
     requests?: Dictionary<bigint, Request>
     rejected?: Dictionary<bigint, Request>
-    accepted?: Dictionary<bigint, Request>
+    /**
+     * Internal to the treasury's loan decision: the decide loop's working state, held only between the
+     * messages of one decide chain and keyed however that loop needs. Kept as the raw dictionary cell
+     * and deliberately NOT parsed, so the contract can change its layout without breaking this SDK.
+     * Do not read it: an accepted request is in `accrued` and then `staked` with its final terms, and
+     * `getLoanRequest` finds one borrower's request in whichever stage it is.
+     */
+    accepted?: Cell | null
     accrued?: Dictionary<bigint, Request>
     staked?: Dictionary<bigint, Request>
     recovering?: Dictionary<bigint, Request>
@@ -209,7 +216,7 @@ export const participationDictionaryValue: DictionaryValue<Participation> = {
             .storeDict(src.sorted)
             .storeDict(src.requests)
             .storeDict(src.rejected)
-            .storeDict(src.accepted)
+            .storeMaybeRef(src.accepted ?? null)
             .storeDict(src.accrued)
             .storeDict(src.staked)
             .storeDict(src.recovering)
@@ -226,7 +233,7 @@ export const participationDictionaryValue: DictionaryValue<Participation> = {
             sorted: src.loadDict(Dictionary.Keys.BigUint(120), sortedDictionaryValue),
             requests: src.loadDict(Dictionary.Keys.BigUint(256), requestDictionaryValue),
             rejected: src.loadDict(Dictionary.Keys.BigUint(256), requestDictionaryValue),
-            accepted: src.loadDict(Dictionary.Keys.BigUint(256), requestDictionaryValue),
+            accepted: src.loadMaybeRef(),
             accrued: src.loadDict(Dictionary.Keys.BigUint(256), requestDictionaryValue),
             staked: src.loadDict(Dictionary.Keys.BigUint(256), requestDictionaryValue),
             recovering: src.loadDict(Dictionary.Keys.BigUint(256), requestDictionaryValue),
@@ -323,7 +330,8 @@ export class Treasury implements Contract {
             sorted: Dictionary.loadDirect(Dictionary.Keys.BigUint(120), sortedDictionaryValue, stack.readCellOpt()),
             requests: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
             rejected: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
-            accepted: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
+            // internal to the decide loop; returned as the raw cell and never parsed, see Participation
+            accepted: stack.readCellOpt(),
             accrued: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
             staked: Dictionary.loadDirect(Dictionary.Keys.BigUint(256), requestDictionaryValue, stack.readCellOpt()),
             recovering: Dictionary.loadDirect(

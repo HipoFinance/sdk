@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { Address, beginCell, Cell, Dictionary, TupleReader, type ContractProvider, type TupleItem } from '@ton/core'
 import { computeApy } from './Apy'
-import { Treasury, requestDictionaryValue } from './Treasury'
+import { Treasury, participationDictionaryValue, requestDictionaryValue } from './Treasury'
 
 // get_treasury_state returns a FLAT TUPLE that this SDK reads by position, and every consumer
 // downstream inherits those positions. When the treasury inserted `deficit` at index 5 it shifted
@@ -175,4 +175,36 @@ void test('a stored request round-trips with and without max_stake', () => {
             { ...request, newStakeMsg: request.newStakeMsg.hash() },
         )
     }
+})
+
+// A participation's `accepted` dict is the treasury's internal working state during a loan decision,
+// and its key layout changes with the contract (416 bits since the auction-floors release, 256
+// before). The SDK keeps it as an opaque cell, so a participation parses whatever that layout is,
+// and writes it back byte for byte.
+void test('keeps a participation’s accepted dict opaque, whatever its key width', () => {
+    const accepted = Dictionary.empty(Dictionary.Keys.BigUint(416), Dictionary.Values.Uint(8))
+    accepted.set((5n << 256n) + 123n, 1)
+    const acceptedCell = beginCell().storeDictDirect(accepted).endCell()
+    const stored = beginCell()
+        .storeUint(1, 4)
+        .storeUint(1, 16)
+        .storeDict(null)
+        .storeDict(null)
+        .storeDict(null)
+        .storeMaybeRef(acceptedCell)
+        .storeDict(null)
+        .storeDict(null)
+        .storeDict(null)
+        .storeCoins(0)
+        .storeCoins(0)
+        .storeUint(0, 256)
+        .storeUint(0, 32)
+        .storeUint(0, 32)
+        .endCell()
+
+    const parsed = participationDictionaryValue.parse(stored.beginParse())
+    assert.ok(parsed.accepted?.equals(acceptedCell))
+    const written = beginCell()
+    participationDictionaryValue.serialize(parsed, written)
+    assert.ok(written.endCell().equals(stored))
 })
