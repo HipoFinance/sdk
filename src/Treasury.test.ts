@@ -177,14 +177,17 @@ void test('a stored request round-trips with and without max_stake', () => {
     }
 })
 
-// A participation's `accepted` dict is the treasury's internal working state during a loan decision,
-// and its key layout changes with the contract (416 bits since the auction-floors release, 256
-// before). The SDK keeps it as an opaque cell, so a participation parses whatever that layout is,
-// and writes it back byte for byte.
-void test('keeps a participation’s accepted dict opaque, whatever its key width', () => {
+// A participation's `accepted` and `accrued` dicts are the treasury's internal working state during a
+// loan decision, and their layout changes with the contract (accepted is keyed by 416 bits since the
+// auction-floors release, 256 before). The SDK keeps both as opaque cells, so a participation parses
+// whatever that layout is, and writes it back byte for byte.
+void test('keeps a participation’s accepted and accrued dicts opaque, whatever their key width', () => {
     const accepted = Dictionary.empty(Dictionary.Keys.BigUint(416), Dictionary.Values.Uint(8))
     accepted.set((5n << 256n) + 123n, 1)
     const acceptedCell = beginCell().storeDictDirect(accepted).endCell()
+    const accrued = Dictionary.empty(Dictionary.Keys.BigUint(300), Dictionary.Values.Uint(8))
+    accrued.set(7n, 2)
+    const accruedCell = beginCell().storeDictDirect(accrued).endCell()
     const stored = beginCell()
         .storeUint(1, 4)
         .storeUint(1, 16)
@@ -192,7 +195,7 @@ void test('keeps a participation’s accepted dict opaque, whatever its key widt
         .storeDict(null)
         .storeDict(null)
         .storeMaybeRef(acceptedCell)
-        .storeDict(null)
+        .storeMaybeRef(accruedCell)
         .storeDict(null)
         .storeDict(null)
         .storeCoins(0)
@@ -204,6 +207,7 @@ void test('keeps a participation’s accepted dict opaque, whatever its key widt
 
     const parsed = participationDictionaryValue.parse(stored.beginParse())
     assert.ok(parsed.accepted?.equals(acceptedCell))
+    assert.ok(parsed.accrued?.equals(accruedCell))
     const written = beginCell()
     participationDictionaryValue.serialize(parsed, written)
     assert.ok(written.endCell().equals(stored))
