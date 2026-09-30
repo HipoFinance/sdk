@@ -177,11 +177,14 @@ void test('a stored request round-trips with and without max_stake', () => {
     }
 })
 
-// A participation's `accepted` and `accrued` dicts are the treasury's internal working state during a
-// loan decision, and their layout changes with the contract (accepted is keyed by 416 bits since the
-// auction-floors release, 256 before). The SDK keeps both as opaque cells, so a participation parses
-// whatever that layout is, and writes it back byte for byte.
-void test('keeps a participation’s accepted and accrued dicts opaque, whatever their key width', () => {
+// A participation's `rejected`, `accepted` and `accrued` dicts are the treasury's internal working state
+// during a loan decision, and their layout can change with the contract (accepted is keyed by 416 bits
+// since the auction-floors release, 256 before). The SDK keeps all three as opaque cells, so a
+// participation parses whatever that layout is, and writes it back byte for byte.
+void test('keeps a participation’s rejected, accepted and accrued dicts opaque, whatever their key width', () => {
+    const rejected = Dictionary.empty(Dictionary.Keys.BigUint(200), Dictionary.Values.Uint(8))
+    rejected.set(9n, 3)
+    const rejectedCell = beginCell().storeDictDirect(rejected).endCell()
     const accepted = Dictionary.empty(Dictionary.Keys.BigUint(416), Dictionary.Values.Uint(8))
     accepted.set((5n << 256n) + 123n, 1)
     const acceptedCell = beginCell().storeDictDirect(accepted).endCell()
@@ -193,7 +196,7 @@ void test('keeps a participation’s accepted and accrued dicts opaque, whatever
         .storeUint(1, 16)
         .storeDict(null)
         .storeDict(null)
-        .storeDict(null)
+        .storeMaybeRef(rejectedCell)
         .storeMaybeRef(acceptedCell)
         .storeMaybeRef(accruedCell)
         .storeDict(null)
@@ -206,6 +209,7 @@ void test('keeps a participation’s accepted and accrued dicts opaque, whatever
         .endCell()
 
     const parsed = participationDictionaryValue.parse(stored.beginParse())
+    assert.ok(parsed.rejected?.equals(rejectedCell))
     assert.ok(parsed.accepted?.equals(acceptedCell))
     assert.ok(parsed.accrued?.equals(accruedCell))
     const written = beginCell()
